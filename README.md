@@ -1,97 +1,89 @@
-Create a Bash script named `llama-select.sh` that acts as an ncurses-based model selector for launching a llama.cpp server. The script must be production-ready, efficient, and deployable with a single command.
+# Model Selector
 
-## Core requirements
+A TUI-powered model selector and launcher for llama.cpp. Pick from GGUF/BIN models, configure server parameters via menus, save reusable profiles, and fire up `llama-server` — all from the terminal.
 
-1. **Technology stack**
-   - Use only Bash (version 4+), `dialog` (the standard ncurses TUI toolkit), and common Unix utilities (`find`, `sort`, `mapfile`, etc.).
-   - No Python, Node.js, or other external runtimes.
-   - If `dialog` is not installed, the script must auto-install it using the appropriate package manager for the detected OS:
-     - Debian/Ubuntu: `apt-get`
-     - Fedora/RHEL: `dnf` or `yum`
-     - Arch: `pacman`
-     - macOS: `brew`
-   - If no package manager is available, print a clear error and exit with code 1.
+## Features
 
-2. **llama-server binary detection**
-   - Default binary name is `llama-server`, but allow override via `--server-bin` or env `LLAMA_SERVER_BIN`.
-   - If the binary is not found in `PATH`, check for `./llama-server` and `./server` in the current directory.
-   - If still not found, print error and exit.
+- **Interactive TUI** — ncurses-style menus powered by `dialog`. Select models, edit parameters, confirm before launch.
+- **Non-interactive / agentic mode** — skip the UI entirely with CLI flags (`--model`, `--profile`, etc.). Pipe it into scripts or automation.
+- **Profile system** — save named configurations to `~/.llama-select/profiles/`. Each profile stores host, port, context size, threads, GPU layers, and optional extended params (batch size, micro-batch, KV cache type, expert NGL).
+- **Auto-install** — detects and installs `dialog` if missing.
+- **Binary detection** — finds `llama-server` or `server` in PATH or current directory automatically.
 
-3. **Model directory and discovery**
-   - Default model directory is `$HOME/models`, overridable via `--model-dir` or env `MODEL_DIR`.
-   - Scan recursively with `find` up to a maximum depth of 3 for files ending in `.gguf` or `.bin`.
-   - Sort the list alphabetically.
-   - Use `mapfile` to store paths in an array to handle spaces safely.
+## Quick Start
 
-4. **Command-line options**
-   - Support these flags (all optional, with sensible defaults):
-     - `-m, --model PATH`       : skip model selection TUI and use this file directly.
-     - `-d, --model-dir DIR`    : directory to scan (default `$HOME/models`).
-     - `-s, --server-bin BIN`   : llama-server binary (default `llama-server`).
-     - `-H, --host HOST`        : bind host (default `0.0.0.0`).
-     - `-p, --port PORT`        : port (default `8080`).
-     - `-c, --ctx N`            : context size (default `4096`).
-     - `-t, --threads N`        : CPU threads (default `nproc`).
-     - `-n, --ngl N`            : GPU layers (default `999`).
-     - `-h, --help`             : show usage.
-   - Environment variables can also set defaults: `MODEL_DIR`, `LLAMA_SERVER_BIN`, `HOST`, `PORT`, `CTX`, `THREADS`, `NGL`.
+```bash
+chmod +x llama-selector.sh
+./llama-selector.sh
+```
 
-5. **Interactive TUI flow (only when running in a real terminal and no `--model` given)**
-   - If models are found, present a `dialog --menu` listing models by their basename. Let user pick one.
-   - After selection, show a `dialog --form` to edit host, port, context size, threads, and GPU layers, prefilled with current/default values.
-   - Show a `dialog --yesno` confirmation summarizing all settings.
-   - If any dialog is cancelled, exit gracefully with a message (exit code 0 for user cancellation, 1 for errors).
-   - If no models are found, show a `dialog --msgbox` and exit.
+Drop GGUF or BIN files into `$HOME/models/` (or any dir with `-d`) and launch.
 
-6. **Non‑interactive / agentic mode**
-   - If stdin is not a TTY (`[ ! -t 0 ]`) and `--model` is not provided, print a clear error and usage, exit 1.
-   - If `--model` is provided, skip all dialogs and directly build the command.
-   - With `--model` and other flags, the script should run without any TUI, suitable for automation.
+## Usage
 
-7. **Execution**
-   - Build the command as an array (to preserve spaces):
-     ```bash
-     cmd=("$LLAMA_SERVER_BIN" --model "$model_path" --host "$HOST" --port "$PORT" --ctx-size "$CTX" --threads "$THREADS" --n-gpu-layers "$NGL")
+### Interactive mode (default)
 
-    Print the full command to stderr/stdout for logging.
+Run from a TTY for the full menu-driven workflow: model selection → profile pick → parameter edit → confirm → launch.
 
-    Use exec to replace the shell process with the server.
+### Non-interactive / agentic mode
 
-    Robustness & efficiency
+```bash
+# Direct model path, no UI
+./llama-selector.sh -m ~/models/llama3-8b.Q4_K_M.gguf
 
-        Quote all variables, especially paths.
+# Load a profile + override port
+./llama-selector.sh -P fast -p 3000
 
-        Use arrays for lists and command arguments.
+# All flags:
+./llama-selector.sh \
+    --model PATH           # Skip TUI, use this model directly
+    --model-dir DIR        # Model directory (default: $HOME/models)
+    --server-bin BIN       # llama-server binary name/path
+    --profile NAME         # Load profile params by name
+    --profiles-dir DIR     # Profile directory (default: ~/.llama-select/profiles/)
+    --host HOST            # Bind host (default: 0.0.0.0)
+    --port PORT            # Port (default: 8080)
+    --ctx N                # Context size in tokens (default: 4096)
+    --threads N            # CPU threads (default: nproc)
+    --ngl N                # GPU layers to offload (default: 999)
+    --batch-size N         # Batch size
+    --micro-batch N        # Micro-batch size (--mlock)
+    --kv-cache-type TYPE   # KV cache quantization: f16, q8_0, q4_0
+    --experts-ngl N        # MoE expert GPU layers
+```
 
-        Minimize external process calls; use Bash builtins where possible.
+### Profiles
 
-        Handle errors clearly with exit codes and messages.
+Profiles are `.sh` files that export variables. Example (`~/.llama-select/profiles/fast.sh`):
 
-        Ensure the script can run on a fresh Linux/macOS system with only curl or wget to fetch it.
+```bash
+#!/usr/bin/env bash
+HOST="0.0.0.0"
+PORT="3000"
+CTX="8192"
+THREADS="8"
+NGL="35"
+BATCH_SIZE="512"
+MICRO_BATCH="64"
+KV_CACHE_TYPE="q8_0"
+EXPERTS_NGL="0"
+```
 
-    Single-command deployment
+Save a profile from the TUI after editing parameters, or create one manually.
 
-        The script should be self-contained; after downloading, chmod +x llama-select.sh && ./llama-select.sh should work.
+### Environment overrides
 
-        Optionally, include in a comment a one-liner like:
-        bash
+Every CLI flag can be set via environment variable:
 
-        curl -sSL https://example.com/llama-select.sh | bash
+```bash
+MODEL_DIR=~/my-models PORT=9000 ./llama-selector.sh
+```
 
-        But the main deliverable is the script itself.
+## Dependencies
 
-Acceptance criteria
+- `dialog` — auto-installed if missing (apt/dnf/pacman/brew)
+- `llama-server` or `server` binary in PATH, current dir, or specified with `--server-bin`
 
-    Running ./llama-select.sh interactively with models present shows a TUI menu, then a form, then confirmation, and finally launches llama-server.
+## License
 
-    Running ./llama-select.sh --model /path/to/model.gguf --port 9000 in a non-interactive shell launches the server directly with no TUI.
-
-    Missing dialog triggers automatic installation.
-
-    Missing llama-server or model directory gives clear error.
-
-    No external dependencies beyond dialog and llama-server.
-
-    Handles filenames with spaces.
-
-Output: A file with the bash script on the project folder.
+MIT

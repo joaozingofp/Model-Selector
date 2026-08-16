@@ -1,11 +1,11 @@
 # Model Selector
 
-A TUI-powered model selector and launcher for llama.cpp. Pick from GGUF/BIN models, configure server parameters via menus, save reusable profiles, and fire up `llama-server` — all from the terminal.
+An interactive model selector and launcher for llama.cpp. Browse GGUF/BIN models via TUI menus, configure server parameters with profiles, and launch `llama-server` — all from the terminal.
 
 ## Features
 
 - **Interactive TUI** — ncurses-style menus powered by `dialog`. Select models, edit parameters, confirm before launch.
-- **Non-interactive / agentic mode** — skip the UI entirely with CLI flags (`--model`, `--profile`, etc.). Pipe it into scripts or automation.
+- **Non-interactive mode** — skip the UI entirely with CLI flags (`--model`, `--profile`). Perfect for scripts and automation.
 - **Profile system** — save named configurations to `~/.llama-select/profiles/`. Each profile stores host, port, context size, threads, GPU layers, and optional extended params (batch size, micro-batch, KV cache type, expert NGL).
 - **Auto-install** — detects and installs `dialog` if missing.
 - **Binary detection** — finds `llama-server` or `server` in PATH or current directory automatically.

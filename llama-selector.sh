@@ -28,7 +28,7 @@ PROFILE_PATH=""     # full path to the selected profile file
 # Track which CLI args were explicitly set (for override after profile load)
 declare -A _CLI_OVERRIDES=()
 
-# ─── Usage ────────────────────────────────────────────────────────────
+# ─── Usage ───────────────────────────────────────────────────────────
 usage() {
     cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
@@ -371,10 +371,14 @@ edit_params_form() {
     local host="$1" port="$2" ctx="$3" threads="$4" ngl="$5"
     local batch="$6" micro="$7" kvtype="$8" experts="$9"
 
-    # dialog --form returns exit 1 on OK (not just cancel).
-    # Exit 253 = Cancel/Esc. Capture output unconditionally, then check rc.
-    local output rc=0
-    output=$(dialog --form "Configure server parameters:" 22 60 9 \
+    # Run dialog writing output to a temp file, capture rc immediately.
+    local tmp output rc=0 vals=()
+    tmp="$(mktemp)" || {
+        echo "Internal error: failed to create temp file" >&2
+        exit 1
+    }
+
+    dialog --form "Configure server parameters:" 22 60 9 \
         "Host:"         1 1 "$host"       1 8 20 0 \
         "Port:"         2 1 "$port"       2 8 10 0 \
         "Context:"      3 1 "$ctx"        3 10 8 0 \
@@ -384,16 +388,20 @@ edit_params_form() {
         "Micro-batch:"  7 1 "${micro:-}"  7 14 8 0 \
         "KV Cache Type:"8 1 "${kvtype:-}" 8 15 10 0 \
         "Experts NGL:"  9 1 "${experts:-}" 9 16 6 0 \
-        2>&1 >/dev/tty; rc=$?) || true
+        2> "$tmp" >/dev/tty
+    rc=$?
 
-    if [[ $rc -eq 253 ]]; then
+    if [[ $rc -ne 0 ]]; then
+        rm -f "$tmp"
         echo "Parameter edit cancelled." >&2
         exit 0
     fi
 
+    output="$(<"$tmp")"
+    rm -f "$tmp"
+
     # dialog --form outputs each field value on its own line (newline-separated).
     # Empty fields become empty lines. Parse into array.
-    local vals=()
     while IFS= read -r line; do
         [[ -n "$line" || ${#vals[@]} -lt 9 ]] && vals+=("$line")
     done <<< "$output"
@@ -496,7 +504,7 @@ validate_numeric() {
     fi
 }
 
-# ─── Main ─────────────────────────────────────────────────────────────
+# ─── Main ───────────────────────────────────────────────────────────
 main() {
     # Validate core params
     validate_numeric "THREADS" "$THREADS" "THREADS" "true"
@@ -571,12 +579,12 @@ main() {
 
         # Step 4: Offer to save as new profile (only for Custom selections)
         if [[ -z "$PROFILE" ]]; then
-            local save_choice
-            save_choice=$(dialog --yesno "Save current settings as a new profile?" 8 40 2>&1 >/dev/tty) || {
-                echo "Profile save skipped." >&2
-            }
-            if [[ $? -eq 0 ]]; then
+            dialog --yesno "Save current settings as a new profile?" 8 40 2>/dev/tty
+            rc=$?
+            if [[ $rc -eq 0 ]]; then
                 save_profile_interactive "$MODEL_PATH" || true
+            else
+                echo "Profile save skipped." >&2
             fi
         fi
 

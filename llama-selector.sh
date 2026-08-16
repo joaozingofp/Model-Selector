@@ -222,12 +222,22 @@ save_profile_interactive() {
     local model_path="$1"
 
     # Step 1: Ask for profile name
-    local pname rc=0
-    pname=$(dialog --inputbox "Profile name (no spaces, no extension):" 8 40 "" 2>&1 >/dev/tty; rc=$?) || true
+    local pname rc tmp desc target
+
+    tmp="$(mktemp)" || {
+        echo "Internal error: failed to create temp file" >&2
+        return 1
+    }
+
+    dialog --inputbox "Profile name (no spaces, no extension):" 8 40 "" 2> "$tmp" >/dev/tty
+    rc=$?
     if [[ $rc -ne 0 ]]; then
+        rm -f "$tmp"
         echo "Save cancelled." >&2
         return 1
     fi
+    pname="$(<"$tmp")"
+    rm -f "$tmp"
 
     # Validate name
     if [[ -z "$pname" ]]; then
@@ -240,19 +250,26 @@ save_profile_interactive() {
     fi
 
     # Check if file already exists
-    local target="$PROFILES_DIR/${pname}.sh"
+    target="$PROFILES_DIR/${pname}.sh"
     if [[ -f "$target" ]]; then
         dialog --msgbox "A profile named '$pname' already exists at $target. Delete it first or choose another name." 8 60
         return 1
     fi
 
     # Step 2: Ask for description (first comment line)
-    local desc=""
-    desc=$(dialog --inputbox "Profile description (shown in menu, optional):" 8 50 "" 2>&1 >/dev/tty; rc=$?) || true
+    tmp="$(mktemp)" || {
+        echo "Internal error: failed to create temp file" >&2
+        return 1
+    }
+    dialog --inputbox "Profile description (shown in menu, optional):" 8 50 "" 2> "$tmp" >/dev/tty
+    rc=$?
     if [[ $rc -ne 0 ]]; then
+        rm -f "$tmp"
         echo "Save cancelled." >&2
         return 1
     fi
+    desc="$(<"$tmp")"
+    rm -f "$tmp"
 
     # Step 3: Write the profile file
     mkdir -p "$PROFILES_DIR"
@@ -579,9 +596,7 @@ main() {
 
         # Step 4: Offer to save as new profile (only for Custom selections)
         if [[ -z "$PROFILE" ]]; then
-            dialog --yesno "Save current settings as a new profile?" 8 40 2>/dev/tty
-            rc=$?
-            if [[ $rc -eq 0 ]]; then
+            if dialog --yesno "Save current settings as a new profile?" 8 40 2>/dev/tty >/dev/tty; then
                 save_profile_interactive "$MODEL_PATH" || true
             else
                 echo "Profile save skipped." >&2
